@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --background: #07070f;
+  --foreground: #f0ece0;
+  --card: #0e0e1a;
+  --card-foreground: #f0ece0;
+  --primary: #c8a84b;
+  --primary-foreground: #07070f;
+  --secondary: #161625;
+  --secondary-foreground: #c8a84b;
+  --muted: #1a1a2e;
+  --muted-foreground: #8b8a9a;
+  --accent: #e2c47a;
+  --accent-foreground: #07070f;
+  --border: #2a2a40;
+  --ring: #c8a84b;
+  --radius: 0.5rem;
+  --gold: #c8a84b;
+  --gold-light: #e2c47a;
+  --gold-dim: #7a6530;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--card); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+.font-display {
+  font-family: 'Cinzel', serif;
+}
+.font-mono-data {
+  font-family: 'JetBrains Mono', monospace;
+}
