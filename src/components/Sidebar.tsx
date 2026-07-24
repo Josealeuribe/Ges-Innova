@@ -66,7 +66,6 @@ const navItems: NavItem[] = [
     key: 'contadores', label: 'Contadores', icon: <Hash size={16} />,
     children: [
       { key: 'cargar_f18', label: 'Cargar F.18', icon: S(<Upload size={14} />) },
-      { key: 'listado_f18', label: 'Listado F.18', icon: S(<ClipboardList size={14} />) },
     ],
   },
   {
