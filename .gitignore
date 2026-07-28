@@ -1,1 +1,52 @@
-. /node_modules
+# Dependencias
+node_modules/
+
+# Archivos generados
+dist/
+build/
+.vite/
+.cache/
+coverage/
+
+# Variables de entorno
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# TypeScript
+*.tsbuildinfo
+
+# Archivos locales
+*.local
+
+# Certificados o claves
+*.pem
+*.key
+*.crt

@@ -1,102 +1,340 @@
-import { useState } from "react";
-import LoginPage from "./features/auth/LoginPage";
-import Sidebar, { type ModuleKey } from "./components/Sidebar";
-import Header from "./components/Header";
-import DashboardPage from "./features/dashboard/DashboardPage";
-import InventarioPage from "./features/assets/InventarioPage";
-import MaquinasPage from "./features/assets/MaquinasPage";
-import F18Page from "./features/counters/F18Page";
-import PanelOcupacionPage from "./features/occupancy/PanelOcupacionPage";
-import RegistroTomasPage from "./features/occupancy/RegistroTomasPage";
-import EmployeesPage from "./features/employees/EmployeesPage";
-import BillingPage from "./features/billing/BillingPage";
-import UsersPage from "./features/config/UsersPage";
-import RolesPage from "./features/config/RolesPage";
-import RazonesSocialesPage from "./features/config/RazonesSocialesPage";
-import CasinosPage from "./features/config/CasinosPage";
-import PortalDIANPage from "./features/reception/PortalDIANPage";
-import ReglasPUCPage from "./features/reception/ReglasPUCPage";
-import StubPage from "./components/StubPage";
-import { AppProvider } from "./context/AppContext";
+import {
+  useState,
+} from 'react';
 
-interface User {
+import {
+  Navigate,
+  Route,
+  Routes,
+} from 'react-router-dom';
+
+import LoginPage from './features/auth/LoginPage';
+
+import ProtectedRoute from './features/auth/components/ProtectedRoute';
+
+import {
+  useAuth,
+} from './features/auth/context/AuthContext';
+
+import Sidebar, {
+  type ModuleKey,
+} from './components/Sidebar';
+
+import Header from './components/Header';
+import StubPage from './components/StubPage';
+
+import DashboardPage from './features/dashboard/DashboardPage';
+
+import InventarioPage from './features/assets/InventarioPage';
+import MaquinasPage from './features/assets/MaquinasPage';
+
+import F18Page from './features/counters/F18Page';
+
+import PanelOcupacionPage from './features/occupancy/PanelOcupacionPage';
+import RegistroTomasPage from './features/occupancy/RegistroTomasPage';
+
+import EmployeesPage from './features/employees/EmployeesPage';
+
+import BillingPage from './features/billing/BillingPage';
+
+import UsersPage from './features/config/UsersPage';
+import RolesPage from './features/config/RolesPage';
+import RazonesSocialesPage from './features/config/RazonesSocialesPage';
+import CasinosPage from './features/config/CasinosPage';
+
+import PortalDIANPage from './features/reception/PortalDIANPage';
+import ReglasPUCPage from './features/reception/ReglasPUCPage';
+
+import {
+  AppProvider,
+} from './context/AppContext';
+
+interface HeaderUser {
   name: string;
   role: string;
 }
 
-const STUBS: Partial<Record<ModuleKey, { title: string; description?: string }>> = {
-  activos: { title: "Activos", description: "Selecciona Inventario o Máquinas desde el menú." },
-  contadores: { title: "Contadores", description: "Selecciona Cargar F.18 o Listado F.18 desde el menú." },
-  ocupacion: { title: "Ocupación", description: "Selecciona Panel Análisis o Registrar Toma desde el menú." },
-  fidelizacion: { title: "Fidelización" }, analitica_fidelizacion: { title: "Analítica Fidelización" },
-  directorio_clientes: { title: "Directorio de Clientes" }, campanas_email: { title: "Campañas Email" },
-  importar_excel_fid: { title: "Importar Excel" }, modo_kiosco: { title: "Modo Kiosco" },
-  taller: { title: "Taller Técnico" }, taller_inventario: { title: "Inventario Taller" },
-  nuevo_repuesto: { title: "Nuevo Repuesto" }, reportar_falla: { title: "Reportar Falla" },
-  ver_solicitudes: { title: "Ver Solicitudes" },
-  soporte: { title: "Soporte" }, soporte_dashboard: { title: "Dashboard Soporte" },
-  ver_casos: { title: "Ver Casos" }, crear_caso: { title: "Crear Caso" },
-  base_conocimientos: { title: "Base de Conocimientos" },
-  rrhh: { title: "Recursos Humanos" }, asistencia: { title: "Asistencia" },
-  nomina_bonos: { title: "Nómina / Bonos" }, turnos: { title: "Turnos" },
-  dian: { title: "DIAN" }, monitor_operativo: { title: "Monitor Operativo" },
-  resumen_dian: { title: "Resumen DIAN" }, nueva_factura: { title: "Nueva Factura" },
-  nuevo_doc_soporte: { title: "Nuevo Doc. Soporte" }, resoluciones_dian: { title: "Resoluciones DIAN" },
-  facturacion: { title: "Pagos" }, gestion_pagos: { title: "Gestión de Pagos" },
-  historial_lotes: { title: "Historial de Lotes" },
-  recepcion: { title: "Recepción" }, panel_control: { title: "Panel Control" },
-  cargar_xml: { title: "Cargar XML" }, buzon_email: { title: "Buzón Email" },
-  pages: { title: "Páginas Web" }, movil: { title: "Aplicación Móvil" },
-  configuracion: { title: "Configuración" },
+interface AdminAppProps {
+  user: HeaderUser;
+  onLogout: () => void;
+}
+
+interface StubConfig {
+  title: string;
+  description?: string;
+}
+
+const STUBS: Partial<
+  Record<ModuleKey, StubConfig>
+> = {
+  activos: {
+    title: 'Activos',
+    description:
+      'Selecciona Inventario o Máquinas desde el menú.',
+  },
+
+  contadores: {
+    title: 'Contadores',
+    description:
+      'Selecciona Cargar F.18 o Listado F.18 desde el menú.',
+  },
+
+  ocupacion: {
+    title: 'Ocupación',
+    description:
+      'Selecciona Panel Análisis o Registrar Toma desde el menú.',
+  },
+
+  fidelizacion: {
+    title: 'Fidelización',
+  },
+
+  analitica_fidelizacion: {
+    title: 'Analítica Fidelización',
+  },
+
+  directorio_clientes: {
+    title: 'Directorio de Clientes',
+  },
+
+  campanas_email: {
+    title: 'Campañas Email',
+  },
+
+  importar_excel_fid: {
+    title: 'Importar Excel',
+  },
+
+  modo_kiosco: {
+    title: 'Modo Kiosco',
+  },
+
+  taller: {
+    title: 'Taller Técnico',
+  },
+
+  taller_inventario: {
+    title: 'Inventario Taller',
+  },
+
+  nuevo_repuesto: {
+    title: 'Nuevo Repuesto',
+  },
+
+  reportar_falla: {
+    title: 'Reportar Falla',
+  },
+
+  ver_solicitudes: {
+    title: 'Ver Solicitudes',
+  },
+
+  soporte: {
+    title: 'Soporte',
+  },
+
+  soporte_dashboard: {
+    title: 'Dashboard Soporte',
+  },
+
+  ver_casos: {
+    title: 'Ver Casos',
+  },
+
+  crear_caso: {
+    title: 'Crear Caso',
+  },
+
+  base_conocimientos: {
+    title: 'Base de Conocimientos',
+  },
+
+  asistencia: {
+    title: 'Asistencia',
+  },
+
+  nomina_bonos: {
+    title: 'Nómina / Bonos',
+  },
+
+  turnos: {
+    title: 'Turnos',
+  },
+
+  dian: {
+    title: 'DIAN',
+  },
+
+  monitor_operativo: {
+    title: 'Monitor Operativo',
+  },
+
+  resumen_dian: {
+    title: 'Resumen DIAN',
+  },
+
+  nueva_factura: {
+    title: 'Nueva Factura',
+  },
+
+  nuevo_doc_soporte: {
+    title: 'Nuevo Doc. Soporte',
+  },
+
+  resoluciones_dian: {
+    title: 'Resoluciones DIAN',
+  },
+
+  gestion_pagos: {
+    title: 'Gestión de Pagos',
+  },
+
+  historial_lotes: {
+    title: 'Historial de Lotes',
+  },
+
+  recepcion: {
+    title: 'Recepción',
+  },
+
+  panel_control: {
+    title: 'Panel Control',
+  },
+
+  cargar_xml: {
+    title: 'Cargar XML',
+  },
+
+  buzon_email: {
+    title: 'Buzón Email',
+  },
+
+  pages: {
+    title: 'Páginas Web',
+  },
+
+  movil: {
+    title: 'Aplicación Móvil',
+  },
+
+  configuracion: {
+    title: 'Configuración',
+  },
 };
 
-function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+function AdminApp({
+  user,
+  onLogout,
+}: AdminAppProps) {
+  const [
+    activeModule,
+    setActiveModule,
+  ] = useState<ModuleKey>(
+    'dashboard',
+  );
 
-  const renderPage = () => {
+  const [
+    sidebarCollapsed,
+    setSidebarCollapsed,
+  ] = useState(false);
+
+  function renderPage() {
     switch (activeModule) {
-      case "dashboard": return <DashboardPage />;
-      // Activos
-      case "inventario": return <InventarioPage />;
-      case "maquinas": return <MaquinasPage />;
-      // Contadores
-      case "cargar_f18":
-      case "listado_f18": return <F18Page />;
-      // Ocupación
-      case "panel_ocupacion": return <PanelOcupacionPage />;
-      case "registro_tomas": return <RegistroTomasPage />;
-      // RR.HH. (existing)
-      case "rrhh": return <EmployeesPage />;
-      // Facturación
-      case "facturacion": return <BillingPage />;
-      // Configuración
-      case "usuarios": return <UsersPage />;
-      case "roles": return <RolesPage />;
-      case "razones_sociales": return <RazonesSocialesPage />;
-      case "casinos": return <CasinosPage />;
-      // Recepción
-      case "portal_dian": return <PortalDIANPage />;
-      case "reglas_puc": return <ReglasPUCPage />;
+      case 'dashboard':
+        return <DashboardPage />;
+
+      case 'inventario':
+        return <InventarioPage />;
+
+      case 'maquinas':
+        return <MaquinasPage />;
+
+      case 'cargar_f18':
+      case 'listado_f18':
+        return <F18Page />;
+
+      case 'panel_ocupacion':
+        return <PanelOcupacionPage />;
+
+      case 'registro_tomas':
+        return <RegistroTomasPage />;
+
+      case 'rrhh':
+        return <EmployeesPage />;
+
+      case 'facturacion':
+        return <BillingPage />;
+
+      case 'usuarios':
+        return <UsersPage />;
+
+      case 'roles':
+        return <RolesPage />;
+
+      case 'razones_sociales':
+        return <RazonesSocialesPage />;
+
+      case 'casinos':
+        return <CasinosPage />;
+
+      case 'portal_dian':
+        return <PortalDIANPage />;
+
+      case 'reglas_puc':
+        return <ReglasPUCPage />;
+
       default: {
-        const stub = STUBS[activeModule];
-        return <StubPage title={stub?.title || activeModule} description={stub?.description} />;
+        const stub =
+          STUBS[activeModule];
+
+        return (
+          <StubPage
+            title={
+              stub?.title ??
+              activeModule
+            }
+            description={
+              stub?.description
+            }
+          />
+        );
       }
     }
-  };
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--background)" }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{
+        background:
+          'var(--background)',
+      }}
+    >
       <Sidebar
         active={activeModule}
         onSelect={setActiveModule}
         onLogout={onLogout}
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onToggle={() =>
+          setSidebarCollapsed(
+            (current) => !current,
+          )
+        }
       />
+
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header activeModule={activeModule} user={user} />
-        <main className="flex-1 overflow-y-auto" style={{ background: "var(--background)" }}>
+        <Header
+          activeModule={activeModule}
+          user={user}
+        />
+
+        <main
+          className="flex-1 overflow-y-auto"
+          style={{
+            background:
+              'var(--background)',
+          }}
+        >
           {renderPage()}
         </main>
       </div>
@@ -104,12 +342,107 @@ function AdminApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   );
 }
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  if (!user) return <LoginPage onLogin={setUser} />;
+function LoginRoute() {
+  const {
+    isAuthenticated,
+    isLoading,
+  } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div
+        className="
+          min-h-screen
+          flex
+          items-center
+          justify-center
+        "
+        style={{
+          background:
+            'var(--background)',
+
+          color:
+            'var(--foreground)',
+        }}
+      >
+        Restaurando sesión...
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    );
+  }
+
+  return <LoginPage />;
+}
+
+function AuthenticatedAdminApp() {
+  const {
+    usuario,
+    logout,
+  } = useAuth();
+
+  if (!usuario) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
+  }
+
+  const fullName = [
+    usuario.nombre,
+    usuario.apellido,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const headerUser: HeaderUser = {
+    name:
+      fullName ||
+      usuario.correo,
+
+    role:
+      usuario.rol?.nombreRol ??
+      'Usuario',
+  };
+
   return (
     <AppProvider>
-      <AdminApp user={user} onLogout={() => setUser(null)} />
+      <AdminApp
+        user={headerUser}
+        onLogout={logout}
+      />
     </AppProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={<LoginRoute />}
+      />
+
+      <Route
+        element={<ProtectedRoute />}
+      >
+        <Route
+          path="/*"
+          element={
+            <AuthenticatedAdminApp />
+          }
+        />
+      </Route>
+    </Routes>
   );
 }
