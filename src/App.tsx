@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useState,
 } from 'react';
 
@@ -63,6 +64,12 @@ interface StubConfig {
   title: string;
   description?: string;
 }
+
+const ACTIVE_MODULE_STORAGE_KEY =
+  'ges-innova.active-module';
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY =
+  'ges-innova.sidebar-collapsed';
 
 const STUBS: Partial<
   Record<ModuleKey, StubConfig>
@@ -222,6 +229,33 @@ const STUBS: Partial<
   },
 };
 
+function getStoredActiveModule(): ModuleKey {
+  if (typeof window === 'undefined') {
+    return 'dashboard';
+  }
+
+  const storedModule =
+    window.localStorage.getItem(
+      ACTIVE_MODULE_STORAGE_KEY,
+    );
+
+  return (
+    storedModule as ModuleKey | null
+  ) ?? 'dashboard';
+}
+
+function getStoredSidebarCollapsed(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return (
+    window.localStorage.getItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+    ) === 'true'
+  );
+}
+
 function AdminApp({
   user,
   onLogout,
@@ -230,13 +264,41 @@ function AdminApp({
     activeModule,
     setActiveModule,
   ] = useState<ModuleKey>(
-    'dashboard',
+    getStoredActiveModule,
   );
 
   const [
     sidebarCollapsed,
     setSidebarCollapsed,
-  ] = useState(false);
+  ] = useState(
+    getStoredSidebarCollapsed,
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      ACTIVE_MODULE_STORAGE_KEY,
+      activeModule,
+    );
+  }, [activeModule]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      String(sidebarCollapsed),
+    );
+  }, [sidebarCollapsed]);
+
+  function handleModuleSelect(
+    module: ModuleKey,
+  ): void {
+    setActiveModule(module);
+  }
+
+  function handleSidebarToggle(): void {
+    setSidebarCollapsed(
+      (current) => !current,
+    );
+  }
 
   function renderPage() {
     switch (activeModule) {
@@ -312,14 +374,10 @@ function AdminApp({
     >
       <Sidebar
         active={activeModule}
-        onSelect={setActiveModule}
+        onSelect={handleModuleSelect}
         onLogout={onLogout}
         collapsed={sidebarCollapsed}
-        onToggle={() =>
-          setSidebarCollapsed(
-            (current) => !current,
-          )
-        }
+        onToggle={handleSidebarToggle}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">

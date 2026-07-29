@@ -1,171 +1,117 @@
-import type {
-  EstadoRegistro,
-} from './casinos.api';
+import { apiRequest } from './http-client';
 
-const API_URL = (
-  import.meta.env.VITE_API_URL ??
-  'http://localhost:3000/api'
-).replace(/\/$/, '');
-
-function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem(
-    'accessToken',
-  );
-
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-}
-
-interface ApiErrorResponse {
-  message?: string | string[];
-  error?: string;
-}
-
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null
-  );
-}
-
-async function getErrorMessage(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse;
-
-    if (Array.isArray(body.message)) {
-      return body.message.join(', ');
-    }
-
-    return (
-      body.message ??
-      body.error ??
-      fallback
-    );
-  } catch {
-    return fallback;
-  }
-}
-
-function extractArray<T>(
-  payload: unknown,
-  possibleKeys: string[],
-): T[] {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-
-  if (!isRecord(payload)) {
-    return [];
-  }
-
-  for (const key of possibleKeys) {
-    const value = payload[key];
-
-    if (Array.isArray(value)) {
-      return value as T[];
-    }
-  }
-
-  if (Array.isArray(payload.data)) {
-    return payload.data as T[];
-  }
-
-  return [];
-}
-
-async function requestList<T>(
-  path: string,
-  possibleKeys: string[],
-): Promise<T[]> {
-  const response = await fetch(
-    `${API_URL}${path}`,
-    {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...getAuthHeader(),
-      },
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(
-        response,
-        'No fue posible cargar los datos relacionados.',
-      ),
-    );
-  }
-
-  const payload: unknown =
-    await response.json();
-
-  return extractArray<T>(
-    payload,
-    possibleKeys,
-  );
-}
 
 export interface Ciudad {
   idCiudad: number;
   nombreCiudad: string;
-  estado: EstadoRegistro;
 }
 
 export interface CentroCosto {
   idCentroCosto: number;
   codigoCentroCosto: string;
   nombreCentroCosto: string;
-  estado: EstadoRegistro;
 }
 
 export interface RazonSocial {
   idRazonSocial: number;
   nit: string;
   nombreRazonSocial: string;
-  estado: EstadoRegistro;
 }
 
-export async function listarCiudadesActivas(): Promise<
+interface ListEnvelope<T> {
+  data?: T[];
+  items?: T[];
+  meta?: {
+    page?: number;
+    totalPages?: number;
+  };
+}
+
+interface NormalizedPage<T> {
+  data: T[];
+  page: number;
+  totalPages: number;
+}
+
+function normalizePage<T>(
+  response: T[] | ListEnvelope<T>,
+): NormalizedPage<T> {
+  if (Array.isArray(response)) {
+    return {
+      data: response,
+      page: 1,
+      totalPages: 1,
+    };
+  }
+
+  const fallbackArray = Object.values(
+    response,
+  ).find(Array.isArray) as T[] | undefined;
+
+  const data =
+    response.data ??
+    response.items ??
+    fallbackArray ??
+    [];
+
+  return {
+    data,
+    page: response.meta?.page ?? 1,
+    totalPages:
+      response.meta?.totalPages ?? 1,
+  };
+}
+
+async function listarTodosActivos<T>(
+  endpoint: string,
+): Promise<T[]> {
+  const limit = 100;
+  let page = 1;
+  let totalPages = 1;
+  const result: T[] = [];
+
+  do {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      estado: 'ACTIVO',
+    });
+
+    const response = await apiRequest<
+      T[] | ListEnvelope<T>
+    >(`${endpoint}?${params.toString()}`);
+
+    const normalized =
+      normalizePage(response);
+
+    result.push(...normalized.data);
+    totalPages = normalized.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+
+  return result;
+}
+
+export function listarCiudadesActivas(): Promise<
   Ciudad[]
 > {
-  return requestList<Ciudad>(
-    '/ciudades?page=1&limit=100&estado=ACTIVO',
-    ['ciudades', 'items'],
+  return listarTodosActivos<Ciudad>(
+    '/ciudades',
   );
 }
 
-export async function listarCentrosCostosActivos(): Promise<
+export function listarCentrosCostosActivos(): Promise<
   CentroCosto[]
 > {
-  return requestList<CentroCosto>(
-    '/centros-costos?page=1&limit=100&estado=ACTIVO',
-    [
-      'centrosCostos',
-      'centros_costos',
-      'items',
-    ],
+  return listarTodosActivos<CentroCosto>(
+    '/centros-costos',
   );
 }
 
-export async function listarRazonesSocialesActivas(): Promise<
+export function listarRazonesSocialesActivas(): Promise<
   RazonSocial[]
 > {
-  return requestList<RazonSocial>(
-    '/razones-sociales?page=1&limit=100&estado=ACTIVO',
-    [
-      'razonesSociales',
-      'razones_sociales',
-      'items',
-    ],
+  return listarTodosActivos<RazonSocial>(
+    '/razones-sociales',
   );
 }

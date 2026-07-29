@@ -35,11 +35,14 @@ import {
 } from './services/casinos.api';
 
 import {
-  listarCentrosCostosActivos,
   listarCiudadesActivas,
+  type Ciudad,
+} from './services/ubicaciones.api';
+
+import {
+  listarCentrosCostosActivos,
   listarRazonesSocialesActivas,
   type CentroCosto,
-  type Ciudad,
   type RazonSocial,
 } from './services/casino-relaciones.api';
 

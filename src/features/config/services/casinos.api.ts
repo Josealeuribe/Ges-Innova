@@ -1,41 +1,4 @@
-const API_URL = (
-  import.meta.env.VITE_API_URL ??
-  'http://localhost:3000/api'
-).replace(/\/$/, '');
-
-function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('accessToken');
-
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {};
-}
-
-async function getErrorMessage(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await response.json()) as {
-      message?: string | string[];
-      error?: string;
-    };
-
-    if (Array.isArray(body.message)) {
-      return body.message.join(', ');
-    }
-
-    return (
-      body.message ??
-      body.error ??
-      fallback
-    );
-  } catch {
-    return fallback;
-  }
-}
+import { apiRequest } from './http-client';
 
 export type EstadoRegistro =
   | 'ACTIVO'
@@ -77,63 +40,36 @@ export interface CasinoPayload {
   codigoEstablecimiento: string;
   telefono: string;
   direccion: string;
-
   idCiudad: number;
   idCentroCosto: number;
   idRazonSocial: number;
-
   estado?: EstadoRegistro;
 }
 
-export interface ListaCasinosResponse {
+export type ActualizarCasinoPayload =
+  Partial<CasinoPayload>;
+
+interface BackendCasinoListResponse {
+  data: Casino[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface CasinosListResponse {
   casinos: Casino[];
+  page: number;
+  limit: number;
   total: number;
+  totalPages: number;
 }
 
 export interface EliminarCasinoResponse {
   message: string;
   casino: Casino;
-}
-
-interface ListaConMetaResponse {
-  data: Casino[];
-  meta?: {
-    total?: number;
-  };
-}
-
-function normalizeListResponse(
-  response:
-    | ListaCasinosResponse
-    | ListaConMetaResponse
-    | Casino[],
-): ListaCasinosResponse {
-  if (Array.isArray(response)) {
-    return {
-      casinos: response,
-      total: response.length,
-    };
-  }
-
-  if (
-    'casinos' in response &&
-    Array.isArray(response.casinos)
-  ) {
-    return {
-      casinos: response.casinos,
-      total:
-        typeof response.total === 'number'
-          ? response.total
-          : response.casinos.length,
-    };
-  }
-
-  return {
-    casinos: response.data,
-    total:
-      response.meta?.total ??
-      response.data.length,
-  };
 }
 
 export async function listar(
@@ -144,174 +80,92 @@ export async function listar(
   idCiudad?: number,
   idCentroCosto?: number,
   idRazonSocial?: number,
-): Promise<ListaCasinosResponse> {
+): Promise<CasinosListResponse> {
   const params = new URLSearchParams({
-    page: page.toString(),
-    limit: limit.toString(),
+    page: String(page),
+    limit: String(limit),
   });
 
   if (buscar?.trim()) {
-    params.append(
-      'buscar',
-      buscar.trim(),
-    );
+    params.set('buscar', buscar.trim());
   }
 
   if (estado) {
-    params.append('estado', estado);
+    params.set('estado', estado);
   }
 
-  if (idCiudad) {
-    params.append(
+  if (idCiudad !== undefined) {
+    params.set(
       'idCiudad',
-      idCiudad.toString(),
+      String(idCiudad),
     );
   }
 
-  if (idCentroCosto) {
-    params.append(
+  if (idCentroCosto !== undefined) {
+    params.set(
       'idCentroCosto',
-      idCentroCosto.toString(),
+      String(idCentroCosto),
     );
   }
 
-  if (idRazonSocial) {
-    params.append(
+  if (idRazonSocial !== undefined) {
+    params.set(
       'idRazonSocial',
-      idRazonSocial.toString(),
+      String(idRazonSocial),
     );
   }
 
-  const response = await fetch(
-    `${API_URL}/casinos?${params.toString()}`,
-    {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...getAuthHeader(),
-      },
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(
-        response,
-        'Error al listar casinos.',
-      ),
+  const response =
+    await apiRequest<BackendCasinoListResponse>(
+      `/casinos?${params.toString()}`,
     );
-  }
-
-  const body = (await response.json()) as
-    | ListaCasinosResponse
-    | ListaConMetaResponse
-    | Casino[];
-
-  return normalizeListResponse(body);
-}
-
-export async function crear(
-  data: CasinoPayload,
-): Promise<Casino> {
-  const response = await fetch(
-    `${API_URL}/casinos`,
-    {
-      method: 'POST',
-
-      headers: {
-        'Content-Type':
-          'application/json',
-        Accept: 'application/json',
-        ...getAuthHeader(),
-      },
-
-      body: JSON.stringify(data),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(
-        response,
-        'Error al crear el casino.',
-      ),
-    );
-  }
-
-  return (await response.json()) as Casino;
-}
-
-export async function actualizar(
-  idCasino: number,
-  data: Partial<CasinoPayload>,
-): Promise<Casino> {
-  const response = await fetch(
-    `${API_URL}/casinos/${idCasino}`,
-    {
-      method: 'PATCH',
-
-      headers: {
-        'Content-Type':
-          'application/json',
-        Accept: 'application/json',
-        ...getAuthHeader(),
-      },
-
-      body: JSON.stringify(data),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(
-        response,
-        'Error al actualizar el casino.',
-      ),
-    );
-  }
-
-  return (await response.json()) as Casino;
-}
-
-export async function eliminar(
-  idCasino: number,
-): Promise<EliminarCasinoResponse> {
-  const response = await fetch(
-    `${API_URL}/casinos/${idCasino}`,
-    {
-      method: 'DELETE',
-
-      headers: {
-        Accept: 'application/json',
-        ...getAuthHeader(),
-      },
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(
-        response,
-        'Error al desactivar el casino.',
-      ),
-    );
-  }
-
-  const body = (await response.json()) as
-    | EliminarCasinoResponse
-    | Casino;
-
-  if (
-    typeof body === 'object' &&
-    body !== null &&
-    'casino' in body
-  ) {
-    return body;
-  }
 
   return {
-    message:
-      'Casino desactivado correctamente.',
-    casino: body,
+    casinos: response.data,
+    page: response.meta.page,
+    limit: response.meta.limit,
+    total: response.meta.total,
+    totalPages: response.meta.totalPages,
   };
+}
+
+export function obtener(
+  idCasino: number,
+): Promise<Casino> {
+  return apiRequest<Casino>(
+    `/casinos/${idCasino}`,
+  );
+}
+
+export function crear(
+  payload: CasinoPayload,
+): Promise<Casino> {
+  return apiRequest<Casino>('/casinos', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function actualizar(
+  idCasino: number,
+  payload: ActualizarCasinoPayload,
+): Promise<Casino> {
+  return apiRequest<Casino>(
+    `/casinos/${idCasino}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function eliminar(
+  idCasino: number,
+): Promise<EliminarCasinoResponse> {
+  return apiRequest<EliminarCasinoResponse>(
+    `/casinos/${idCasino}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }
