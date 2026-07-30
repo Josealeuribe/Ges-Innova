@@ -152,40 +152,74 @@ export default function CasinosPage() {
       ? 'Nuevo Casino'
       : 'Editar Casino';
 
-  const loadRelations =
-    useCallback(async () => {
-      setLoadingRelations(true);
+const loadRelations =
+  useCallback(async () => {
+    setLoadingRelations(true);
 
-      try {
-        const [
-          ciudadesResponse,
-          centrosResponse,
-          razonesResponse,
-        ] = await Promise.all([
-          listarCiudadesActivas(),
-          listarCentrosCostosActivos(),
-          listarRazonesSocialesActivas(),
-        ]);
+    try {
+      const [
+        ciudadesResult,
+        centrosResult,
+        razonesResult,
+      ] = await Promise.allSettled([
+        listarCiudadesActivas(),
+        listarCentrosCostosActivos(),
+        listarRazonesSocialesActivas(),
+      ]);
 
-        setCiudades(ciudadesResponse);
+      if (
+        ciudadesResult.status ===
+        'fulfilled'
+      ) {
+        setCiudades(
+          ciudadesResult.value,
+        );
+      } else {
+        setCiudades([]);
+      }
+
+      if (
+        centrosResult.status ===
+        'fulfilled'
+      ) {
         setCentrosCostos(
-          centrosResponse,
+          centrosResult.value,
         );
+      } else {
+        setCentrosCostos([]);
+      }
+
+      if (
+        razonesResult.status ===
+        'fulfilled'
+      ) {
         setRazonesSociales(
-          razonesResponse,
+          razonesResult.value,
         );
-      } catch (error) {
+      } else {
+        setRazonesSociales([]);
+      }
+
+      const failed = [
+        ciudadesResult,
+        centrosResult,
+        razonesResult,
+      ].filter(
+        (result) =>
+          result.status === 'rejected',
+      );
+
+      if (failed.length > 0) {
         setToast({
           message:
-            error instanceof Error
-              ? error.message
-              : 'No fue posible cargar ciudades, centros de costos y razones sociales.',
+            'Algunos catálogos no pudieron cargarse.',
           type: 'error',
         });
-      } finally {
-        setLoadingRelations(false);
       }
-    }, []);
+    } finally {
+      setLoadingRelations(false);
+    }
+  }, []);
 
   const loadCasinos =
     useCallback(async () => {
