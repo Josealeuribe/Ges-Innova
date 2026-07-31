@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import {
   Edit2,
   Loader2,
@@ -20,6 +24,7 @@ import {
   type RolApi,
   rolesApi,
 } from './services/roles.api'
+import { MatrizPermisosRol } from '../control-acceso/services/control-acceso.api'
 
 type EstadoRol = 'ACTIVO' | 'INACTIVO'
 
@@ -68,7 +73,9 @@ function formatRoleCode(idRol: number): string {
 }
 
 export default function RolesPage() {
-  const [roles, setRoles] = useState<RolApi[]>([])
+  const [roles, setRoles] = useState<RolApi[]>(
+    [],
+  )
   const [search, setSearch] = useState('')
 
   const [loading, setLoading] = useState(true)
@@ -87,11 +94,30 @@ export default function RolesPage() {
     Record<string, string>
   >({})
 
+  const [
+    permissionMatrix,
+    setPermissionMatrix,
+  ] = useState<MatrizPermisosRol | null>(
+    null,
+  )
+  const [
+    loadingPermissions,
+    setLoadingPermissions,
+  ] = useState(false)
+  const [
+    permissionsError,
+    setPermissionsError,
+  ] = useState<string | null>(null)
+
   const [toast, setToast] =
     useState<ToastState | null>(null)
 
-  const loadRoles = async () => {
-    setLoading(true)
+  const loadRoles = async (
+    showLoader = true,
+  ) => {
+    if (showLoader) {
+      setLoading(true)
+    }
 
     try {
       const response = await rolesApi.listar({
@@ -109,7 +135,9 @@ export default function RolesPage() {
         type: 'error',
       })
     } finally {
-      setLoading(false)
+      if (showLoader) {
+        setLoading(false)
+      }
     }
   }
 
@@ -118,40 +146,72 @@ export default function RolesPage() {
   }, [])
 
   const filteredRoles = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = search
+      .trim()
+      .toLowerCase()
 
     if (!query) {
       return roles
     }
 
     return roles.filter((role) => {
-      const nombre =
+      const name =
         role.nombreRol.toLowerCase()
-      const descripcion =
-        role.descripcion?.toLowerCase() ?? ''
+      const description =
+        role.descripcion?.toLowerCase() ??
+        ''
 
       return (
-        nombre.includes(query) ||
-        descripcion.includes(query)
+        name.includes(query) ||
+        description.includes(query)
       )
     })
   }, [roles, search])
 
-  const summary = useMemo(() => {
-    return {
+  const summary = useMemo(
+    () => ({
       totalRoles: roles.length,
       activeRoles: roles.filter(
-        (role) => role.estado === 'ACTIVO',
+        (role) =>
+          role.estado === 'ACTIVO',
       ).length,
       assignedUsers: roles.reduce(
         (total, role) =>
           total + role.totalUsuarios,
         0,
       ),
-    }
-  }, [roles])
+    }),
+    [roles],
+  )
 
-  const setField = <K extends keyof RoleForm>(
+  const selectedPermissions = useMemo(
+    () =>
+      permissionMatrix?.modulos.reduce(
+        (total, modulo) =>
+          total +
+          modulo.permisos.filter(
+            (permiso) =>
+              permiso.permitido,
+          ).length,
+        0,
+      ) ?? 0,
+    [permissionMatrix],
+  )
+
+  const totalPermissions = useMemo(
+    () =>
+      permissionMatrix?.modulos.reduce(
+        (total, modulo) =>
+          total +
+          modulo.permisos.length,
+        0,
+      ) ?? 0,
+    [permissionMatrix],
+  )
+
+  const setField = <
+    K extends keyof RoleForm,
+  >(
     field: K,
     value: RoleForm[K],
   ) => {
@@ -167,9 +227,15 @@ export default function RolesPage() {
   }
 
   const validateForm = (): boolean => {
-    const nextErrors: Record<string, string> = {}
+    const nextErrors: Record<
+      string,
+      string
+    > = {}
+
     const normalizedName =
-      form.nombreRol.trim().toLowerCase()
+      form.nombreRol
+        .trim()
+        .toLowerCase()
 
     if (!form.nombreRol.trim()) {
       nextErrors.nombreRol = 'Requerido'
@@ -184,7 +250,8 @@ export default function RolesPage() {
           role.idRol !== editingId &&
           role.nombreRol
             .trim()
-            .toLowerCase() === normalizedName,
+            .toLowerCase() ===
+          normalizedName,
       )
 
       if (duplicatedRole) {
@@ -198,6 +265,16 @@ export default function RolesPage() {
         'Máximo 255 caracteres'
     }
 
+    if (!permissionMatrix) {
+      nextErrors.permisos =
+        'No fue posible cargar la matriz de permisos.'
+    } else if (
+      totalPermissions === 0
+    ) {
+      nextErrors.permisos =
+        'No existen permisos configurados para asignar.'
+    }
+
     setErrors(nextErrors)
 
     return (
@@ -205,29 +282,21 @@ export default function RolesPage() {
     )
   }
 
-  const buildPayload = (): CrearRolPayload => ({
-    nombreRol: form.nombreRol.trim(),
-    descripcion:
-      form.descripcion.trim() || null,
-    estado: form.estado,
-  })
+  const buildPayload =
+    (): CrearRolPayload => ({
+      nombreRol: form.nombreRol.trim(),
+      descripcion:
+        form.descripcion.trim() || null,
+      estado: form.estado,
+    })
 
-  const openCreateModal = () => {
+  const resetModalState = () => {
+    setModalOpen(false)
     setEditingId(null)
     setForm(INITIAL_FORM)
     setErrors({})
-    setModalOpen(true)
-  }
-
-  const openEditModal = (role: RolApi) => {
-    setEditingId(role.idRol)
-    setForm({
-      nombreRol: role.nombreRol,
-      descripcion: role.descripcion ?? '',
-      estado: role.estado,
-    })
-    setErrors({})
-    setModalOpen(true)
+    setPermissionMatrix(null)
+    setPermissionsError(null)
   }
 
   const closeModal = () => {
@@ -235,11 +304,252 @@ export default function RolesPage() {
       return
     }
 
-    setModalOpen(false)
+    resetModalState()
+  }
+
+  const openCreateModal = async () => {
     setEditingId(null)
     setForm(INITIAL_FORM)
     setErrors({})
+    setPermissionMatrix(null)
+    setPermissionsError(null)
+    setModalOpen(true)
+    setLoadingPermissions(true)
+
+    try {
+      const matrix =
+        await rolesApi.obtenerCatalogoPermisos()
+
+      setPermissionMatrix(matrix)
+    } catch (error) {
+      setPermissionsError(
+        getErrorMessage(
+          error,
+          'No se pudo cargar la matriz de permisos.',
+        ),
+      )
+    } finally {
+      setLoadingPermissions(false)
+    }
   }
+
+  const openEditModal = async (
+    role: RolApi,
+  ) => {
+    setEditingId(role.idRol)
+    setForm({
+      nombreRol: role.nombreRol,
+      descripcion: role.descripcion ?? '',
+      estado: role.estado,
+    })
+    setErrors({})
+    setPermissionMatrix(null)
+    setPermissionsError(null)
+    setModalOpen(true)
+    setLoadingPermissions(true)
+
+    try {
+      const response =
+        await rolesApi.obtenerMatrizPermisos(
+          role.idRol,
+        )
+
+      setPermissionMatrix({
+        acciones: response.acciones,
+        modulos: response.modulos,
+      })
+    } catch (error) {
+      setPermissionsError(
+        getErrorMessage(
+          error,
+          'No se pudieron cargar los permisos del rol.',
+        ),
+      )
+    } finally {
+      setLoadingPermissions(false)
+    }
+  }
+
+  const togglePermission = (
+    idPermiso: number,
+  ) => {
+    setPermissionMatrix((current) => {
+      if (!current) {
+        return current
+      }
+
+      return {
+        ...current,
+        modulos: current.modulos.map(
+          (modulo) => ({
+            ...modulo,
+            permisos:
+              modulo.permisos.map(
+                (permiso) =>
+                  permiso.idPermiso ===
+                    idPermiso
+                    ? {
+                      ...permiso,
+                      permitido:
+                        !permiso.permitido,
+                    }
+                    : permiso,
+              ),
+          }),
+        ),
+      }
+    })
+
+    setErrors((current) => ({
+      ...current,
+      permisos: '',
+    }))
+  }
+
+  const setAllPermissions = (
+    permitido: boolean,
+  ) => {
+    setPermissionMatrix((current) => {
+      if (!current) {
+        return current
+      }
+
+      return {
+        ...current,
+        modulos: current.modulos.map(
+          (modulo) => ({
+            ...modulo,
+            permisos:
+              modulo.permisos.map(
+                (permiso) => ({
+                  ...permiso,
+                  permitido,
+                }),
+              ),
+          }),
+        ),
+      }
+    })
+  }
+
+  const setModulePermissions = (
+    idModulo: number,
+    permitido: boolean,
+  ) => {
+    setPermissionMatrix((current) => {
+      if (!current) {
+        return current
+      }
+
+      return {
+        ...current,
+        modulos: current.modulos.map(
+          (modulo) =>
+            modulo.idModulo === idModulo
+              ? {
+                ...modulo,
+                permisos:
+                  modulo.permisos.map(
+                    (permiso) => ({
+                      ...permiso,
+                      permitido,
+                    }),
+                  ),
+              }
+              : modulo,
+        ),
+      }
+    })
+  }
+
+  const setActionPermissions = (
+    idAccion: number,
+    permitido: boolean,
+  ) => {
+    setPermissionMatrix((current) => {
+      if (!current) {
+        return current
+      }
+
+      return {
+        ...current,
+        modulos: current.modulos.map(
+          (modulo) => ({
+            ...modulo,
+            permisos:
+              modulo.permisos.map(
+                (permiso) =>
+                  permiso.idAccion ===
+                    idAccion
+                    ? {
+                      ...permiso,
+                      permitido,
+                    }
+                    : permiso,
+              ),
+          }),
+        ),
+      }
+    })
+  }
+
+  const isModuleFullySelected = (
+    idModulo: number,
+  ): boolean => {
+    const module =
+      permissionMatrix?.modulos.find(
+        (item) =>
+          item.idModulo === idModulo,
+      )
+
+    return Boolean(
+      module &&
+      module.permisos.length > 0 &&
+      module.permisos.every(
+        (permission) =>
+          permission.permitido,
+      ),
+    )
+  }
+
+  const isActionFullySelected = (
+    idAccion: number,
+  ): boolean => {
+    if (!permissionMatrix) {
+      return false
+    }
+
+    const permissions =
+      permissionMatrix.modulos.flatMap(
+        (modulo) =>
+          modulo.permisos.filter(
+            (permission) =>
+              permission.idAccion ===
+              idAccion,
+          ),
+      )
+
+    return (
+      permissions.length > 0 &&
+      permissions.every(
+        (permission) =>
+          permission.permitido,
+      )
+    )
+  }
+
+  const buildPermissionsPayload = () =>
+    permissionMatrix?.modulos.flatMap(
+      (modulo) =>
+        modulo.permisos.map(
+          (permission) => ({
+            idPermiso:
+              permission.idPermiso,
+            permitido:
+              permission.permitido,
+          }),
+        ),
+    ) ?? []
 
   const handleSubmit = async () => {
     if (!validateForm()) {
@@ -248,50 +558,73 @@ export default function RolesPage() {
 
     setSaving(true)
 
+    let persistedRole: RolApi | null =
+      null
+
     try {
-      const payload = buildPayload()
+      const rolePayload = buildPayload()
 
-      if (editingId === null) {
-        const createdRole =
-          await rolesApi.crear(payload)
-
-        setRoles((current) => [
-          ...current,
-          createdRole,
-        ])
-
-        setToast({
-          message: `Rol "${createdRole.nombreRol}" creado exitosamente.`,
-          type: 'success',
-        })
-      } else {
-        const updatedRole =
-          await rolesApi.actualizar(
+      persistedRole =
+        editingId === null
+          ? await rolesApi.crear(
+            rolePayload,
+          )
+          : await rolesApi.actualizar(
             editingId,
-            payload,
+            rolePayload,
           )
 
-        setRoles((current) =>
-          current.map((role) =>
-            role.idRol === editingId
-              ? updatedRole
-              : role,
-          ),
+      await rolesApi.guardarMatrizPermisos(
+        persistedRole.idRol,
+        buildPermissionsPayload(),
+      )
+
+      setRoles((current) => {
+        const exists = current.some(
+          (role) =>
+            role.idRol ===
+            persistedRole?.idRol,
         )
 
-        setToast({
-          message:
-            'Rol actualizado exitosamente.',
-          type: 'success',
-        })
+        if (!persistedRole) {
+          return current
+        }
+
+        if (!exists) {
+          return [
+            ...current,
+            persistedRole,
+          ]
+        }
+
+        return current.map((role) =>
+          role.idRol ===
+            persistedRole?.idRol
+            ? persistedRole
+            : role,
+        )
+      })
+
+      setToast({
+        message:
+          editingId === null
+            ? `Rol "${persistedRole.nombreRol}" creado con ${selectedPermissions} permiso(s).`
+            : `Rol actualizado con ${selectedPermissions} permiso(s).`,
+        type: 'success',
+      })
+
+      resetModalState()
+    } catch (error) {
+      if (persistedRole) {
+        await loadRoles(false)
       }
 
-      closeModal()
-    } catch (error) {
       setToast({
         message: getErrorMessage(
           error,
-          'No se pudo guardar el rol.',
+          persistedRole
+            ? 'El rol fue guardado, pero no fue posible completar la asignación de permisos.'
+            : 'No se pudo guardar el rol.',
         ),
         type: 'error',
       })
@@ -370,7 +703,9 @@ export default function RolesPage() {
 
     try {
       const updatedRole =
-        await rolesApi.inactivar(role.idRol)
+        await rolesApi.inactivar(
+          role.idRol,
+        )
 
       setRoles((current) =>
         current.map((item) =>
@@ -423,12 +758,15 @@ export default function RolesPage() {
             className="rounded-lg p-4"
             style={{
               background: 'var(--card)',
-              border: '1px solid var(--border)',
+              border:
+                '1px solid var(--border)',
             }}
           >
             <p
               className="font-mono-data text-2xl font-bold"
-              style={{ color: card.color }}
+              style={{
+                color: card.color,
+              }}
             >
               {card.value}
             </p>
@@ -452,13 +790,15 @@ export default function RolesPage() {
           className="flex items-center gap-2 px-3 py-2.5 rounded flex-1"
           style={{
             background: 'var(--card)',
-            border: '1px solid var(--border)',
+            border:
+              '1px solid var(--border)',
           }}
         >
           <Search
             size={13}
             style={{
-              color: 'var(--muted-foreground)',
+              color:
+                'var(--muted-foreground)',
             }}
           />
 
@@ -467,7 +807,9 @@ export default function RolesPage() {
             placeholder="Buscar por nombre o descripción..."
             value={search}
             onChange={(event) =>
-              setSearch(event.target.value)
+              setSearch(
+                event.target.value,
+              )
             }
             className="bg-transparent outline-none text-xs w-full"
             style={{
@@ -493,11 +835,14 @@ export default function RolesPage() {
 
         <button
           type="button"
-          onClick={openCreateModal}
+          onClick={() =>
+            void openCreateModal()
+          }
           className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold"
           style={{
             background: 'var(--gold)',
-            color: 'var(--primary-foreground)',
+            color:
+              'var(--primary-foreground)',
           }}
         >
           <Plus size={13} />
@@ -510,7 +855,8 @@ export default function RolesPage() {
         className="rounded-lg overflow-hidden"
         style={{
           background: 'var(--card)',
-          border: '1px solid var(--border)',
+          border:
+            '1px solid var(--border)',
         }}
       >
         {loading ? (
@@ -518,7 +864,9 @@ export default function RolesPage() {
             <Loader2
               size={18}
               className="animate-spin"
-              style={{ color: 'var(--gold)' }}
+              style={{
+                color: 'var(--gold)',
+              }}
             />
 
             <span
@@ -566,240 +914,292 @@ export default function RolesPage() {
             </thead>
 
             <tbody>
-              {filteredRoles.map((role) => {
-                const processing =
-                  processingId === role.idRol
+              {filteredRoles.map(
+                (role) => {
+                  const processing =
+                    processingId ===
+                    role.idRol
 
-                return (
-                  <tr
-                    key={role.idRol}
-                    style={{
-                      borderBottom:
-                        '1px solid rgba(255,255,255,0.04)',
-                    }}
-                    onMouseEnter={(event) => {
-                      event.currentTarget.style.background =
-                        'rgba(255,255,255,0.02)'
-                    }}
-                    onMouseLeave={(event) => {
-                      event.currentTarget.style.background =
-                        'transparent'
-                    }}
-                  >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold"
-                          style={{
-                            background:
-                              'rgba(200,168,75,0.1)',
-                            color: 'var(--gold)',
-                          }}
-                        >
-                          {role.nombreRol.charAt(0)}
-                        </div>
-
-                        <div>
-                          <p
+                  return (
+                    <tr
+                      key={role.idRol}
+                      style={{
+                        borderBottom:
+                          '1px solid rgba(255,255,255,0.04)',
+                      }}
+                      onMouseEnter={(
+                        event,
+                      ) => {
+                        event.currentTarget.style.background =
+                          'rgba(255,255,255,0.02)'
+                      }}
+                      onMouseLeave={(
+                        event,
+                      ) => {
+                        event.currentTarget.style.background =
+                          'transparent'
+                      }}
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold"
                             style={{
+                              background:
+                                'rgba(200,168,75,0.1)',
                               color:
-                                'var(--foreground)',
+                                'var(--gold)',
                             }}
                           >
-                            {role.nombreRol}
-                          </p>
+                            {role.nombreRol.charAt(
+                              0,
+                            )}
+                          </div>
 
-                          <p
+                          <div>
+                            <p
+                              style={{
+                                color:
+                                  'var(--foreground)',
+                              }}
+                            >
+                              {
+                                role.nombreRol
+                              }
+                            </p>
+
+                            <p
+                              style={{
+                                color:
+                                  'var(--muted-foreground)',
+                                fontSize:
+                                  '10px',
+                              }}
+                            >
+                              {formatRoleCode(
+                                role.idRol,
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td
+                        className="px-5 py-4"
+                        style={{
+                          color:
+                            'var(--muted-foreground)',
+                        }}
+                      >
+                        {role.descripcion ||
+                          'Sin descripción'}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className="font-mono-data font-bold text-sm"
+                          style={{
+                            color:
+                              role.totalUsuarios >
+                                0
+                                ? 'var(--foreground)'
+                                : 'var(--muted-foreground)',
+                          }}
+                        >
+                          {
+                            role.totalUsuarios
+                          }
+                        </span>
+                      </td>
+
+                      <td
+                        className="px-5 py-4"
+                        style={{
+                          color:
+                            'var(--muted-foreground)',
+                        }}
+                      >
+                        {formatDate(
+                          role.fechaCreacion,
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className="px-2.5 py-1 rounded text-[10px] font-medium"
+                          style={{
+                            background:
+                              role.estado ===
+                                'ACTIVO'
+                                ? 'rgba(74,222,128,0.1)'
+                                : 'rgba(248,113,113,0.1)',
+                            color:
+                              role.estado ===
+                                'ACTIVO'
+                                ? '#4ade80'
+                                : '#f87171',
+                          }}
+                        >
+                          {role.estado ===
+                            'ACTIVO'
+                            ? 'Activo'
+                            : 'Inactivo'}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            title="Editar rol y permisos"
+                            disabled={
+                              processing
+                            }
+                            onClick={() =>
+                              void openEditModal(
+                                role,
+                              )
+                            }
+                            className="p-1.5 rounded"
                             style={{
                               color:
                                 'var(--muted-foreground)',
-                              fontSize: '10px',
+                              opacity:
+                                processing
+                                  ? 0.5
+                                  : 1,
+                            }}
+                            onMouseEnter={(
+                              event,
+                            ) => {
+                              if (
+                                !processing
+                              ) {
+                                event.currentTarget.style.color =
+                                  'var(--gold)'
+                              }
+                            }}
+                            onMouseLeave={(
+                              event,
+                            ) => {
+                              event.currentTarget.style.color =
+                                'var(--muted-foreground)'
                             }}
                           >
-                            {formatRoleCode(
-                              role.idRol,
+                            <Edit2
+                              size={13}
+                            />
+                          </button>
+
+                          <button
+                            type="button"
+                            title={
+                              role.estado ===
+                                'ACTIVO'
+                                ? 'Desactivar'
+                                : 'Activar'
+                            }
+                            disabled={
+                              processing
+                            }
+                            onClick={() =>
+                              void handleToggleStatus(
+                                role,
+                              )
+                            }
+                            style={{
+                              color:
+                                role.estado ===
+                                  'ACTIVO'
+                                  ? '#4ade80'
+                                  : '#f87171',
+                              opacity:
+                                processing
+                                  ? 0.5
+                                  : 1,
+                            }}
+                          >
+                            {processing ? (
+                              <Loader2
+                                size={15}
+                                className="animate-spin"
+                              />
+                            ) : role.estado ===
+                              'ACTIVO' ? (
+                              <ToggleRight
+                                size={15}
+                              />
+                            ) : (
+                              <ToggleLeft
+                                size={15}
+                              />
                             )}
-                          </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            title="Eliminar"
+                            disabled={
+                              processing
+                            }
+                            onClick={() =>
+                              void handleDelete(
+                                role,
+                              )
+                            }
+                            className="p-1.5 rounded"
+                            style={{
+                              color:
+                                'var(--muted-foreground)',
+                              opacity:
+                                processing
+                                  ? 0.5
+                                  : 1,
+                            }}
+                            onMouseEnter={(
+                              event,
+                            ) => {
+                              if (
+                                !processing
+                              ) {
+                                event.currentTarget.style.color =
+                                  '#f87171'
+                              }
+                            }}
+                            onMouseLeave={(
+                              event,
+                            ) => {
+                              event.currentTarget.style.color =
+                                'var(--muted-foreground)'
+                            }}
+                          >
+                            <Trash2
+                              size={13}
+                            />
+                          </button>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    </tr>
+                  )
+                },
+              )}
 
+              {filteredRoles.length ===
+                0 && (
+                  <tr>
                     <td
-                      className="px-5 py-4"
+                      colSpan={6}
+                      className="px-5 py-12 text-center"
                       style={{
                         color:
                           'var(--muted-foreground)',
                       }}
                     >
-                      {role.descripcion ||
-                        'Sin descripción'}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className="font-mono-data font-bold text-sm"
-                        style={{
-                          color:
-                            role.totalUsuarios > 0
-                              ? 'var(--foreground)'
-                              : 'var(--muted-foreground)',
-                        }}
-                      >
-                        {role.totalUsuarios}
-                      </span>
-                    </td>
-
-                    <td
-                      className="px-5 py-4"
-                      style={{
-                        color:
-                          'var(--muted-foreground)',
-                      }}
-                    >
-                      {formatDate(
-                        role.fechaCreacion,
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className="px-2.5 py-1 rounded text-[10px] font-medium"
-                        style={{
-                          background:
-                            role.estado === 'ACTIVO'
-                              ? 'rgba(74,222,128,0.1)'
-                              : 'rgba(248,113,113,0.1)',
-                          color:
-                            role.estado === 'ACTIVO'
-                              ? '#4ade80'
-                              : '#f87171',
-                        }}
-                      >
-                        {role.estado === 'ACTIVO'
-                          ? 'Activo'
-                          : 'Inactivo'}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          title="Editar"
-                          disabled={processing}
-                          onClick={() =>
-                            openEditModal(role)
-                          }
-                          className="p-1.5 rounded"
-                          style={{
-                            color:
-                              'var(--muted-foreground)',
-                            opacity: processing
-                              ? 0.5
-                              : 1,
-                          }}
-                          onMouseEnter={(event) => {
-                            if (!processing) {
-                              event.currentTarget.style.color =
-                                'var(--gold)'
-                            }
-                          }}
-                          onMouseLeave={(event) => {
-                            event.currentTarget.style.color =
-                              'var(--muted-foreground)'
-                          }}
-                        >
-                          <Edit2 size={13} />
-                        </button>
-
-                        <button
-                          type="button"
-                          title={
-                            role.estado === 'ACTIVO'
-                              ? 'Desactivar'
-                              : 'Activar'
-                          }
-                          disabled={processing}
-                          onClick={() =>
-                            void handleToggleStatus(
-                              role,
-                            )
-                          }
-                          style={{
-                            color:
-                              role.estado === 'ACTIVO'
-                                ? '#4ade80'
-                                : '#f87171',
-                            opacity: processing
-                              ? 0.5
-                              : 1,
-                          }}
-                        >
-                          {processing ? (
-                            <Loader2
-                              size={15}
-                              className="animate-spin"
-                            />
-                          ) : role.estado ===
-                            'ACTIVO' ? (
-                            <ToggleRight
-                              size={15}
-                            />
-                          ) : (
-                            <ToggleLeft
-                              size={15}
-                            />
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          title="Eliminar"
-                          disabled={processing}
-                          onClick={() =>
-                            void handleDelete(role)
-                          }
-                          className="p-1.5 rounded"
-                          style={{
-                            color:
-                              'var(--muted-foreground)',
-                            opacity: processing
-                              ? 0.5
-                              : 1,
-                          }}
-                          onMouseEnter={(event) => {
-                            if (!processing) {
-                              event.currentTarget.style.color =
-                                '#f87171'
-                            }
-                          }}
-                          onMouseLeave={(event) => {
-                            event.currentTarget.style.color =
-                              'var(--muted-foreground)'
-                          }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                      No se encontraron
+                      roles.
                     </td>
                   </tr>
-                )
-              })}
-
-              {filteredRoles.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-5 py-12 text-center"
-                    style={{
-                      color:
-                        'var(--muted-foreground)',
-                    }}
-                  >
-                    No se encontraron roles.
-                  </td>
-                </tr>
-              )}
+                )}
             </tbody>
           </table>
         )}
@@ -807,7 +1207,8 @@ export default function RolesPage() {
         <div
           className="px-5 py-3"
           style={{
-            borderTop: '1px solid var(--border)',
+            borderTop:
+              '1px solid var(--border)',
           }}
         >
           <p
@@ -817,8 +1218,8 @@ export default function RolesPage() {
                 'var(--muted-foreground)',
             }}
           >
-            {filteredRoles.length} rol(es)
-            encontrado(s)
+            {filteredRoles.length}{' '}
+            rol(es) encontrado(s)
           </p>
         </div>
       </div>
@@ -831,90 +1232,451 @@ export default function RolesPage() {
             ? 'Nuevo Rol'
             : 'Editar Rol'
         }
-        size="sm"
+        size="lg"
       >
-        <div className="space-y-4">
-          <Field
-            label="Nombre del rol"
-            required
-          >
-            <Input
-              value={form.nombreRol}
-              onChange={(event) =>
-                setField(
-                  'nombreRol',
-                  event.target.value,
-                )
-              }
-              placeholder="Ej: Auditor"
-            />
-
-            {errors.nombreRol && (
-              <p
-                className="text-[10px] mt-1"
-                style={{ color: '#f87171' }}
-              >
-                {errors.nombreRol}
-              </p>
-            )}
-          </Field>
-
-          <Field label="Descripción">
-            <Input
-              value={form.descripcion}
-              onChange={(event) =>
-                setField(
-                  'descripcion',
-                  event.target.value,
-                )
-              }
-              placeholder="Breve descripción del rol"
-            />
-
-            {errors.descripcion && (
-              <p
-                className="text-[10px] mt-1"
-                style={{ color: '#f87171' }}
-              >
-                {errors.descripcion}
-              </p>
-            )}
-          </Field>
-
-          {editingId !== null && (
-            <Field label="Estado">
-              <select
-                value={form.estado}
+        <div className="max-h-[72vh] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field
+              label="Nombre del rol"
+              required
+            >
+              <Input
+                value={form.nombreRol}
                 onChange={(event) =>
                   setField(
-                    'estado',
-                    event.target
-                      .value as EstadoRol,
+                    'nombreRol',
+                    event.target.value,
                   )
                 }
-                className="w-full rounded px-3 py-2.5 text-xs outline-none"
+                placeholder="Ej: Auditor"
+              />
+
+              {errors.nombreRol && (
+                <p
+                  className="text-[10px] mt-1"
+                  style={{
+                    color: '#f87171',
+                  }}
+                >
+                  {errors.nombreRol}
+                </p>
+              )}
+            </Field>
+
+            <Field label="Descripción">
+              <Input
+                value={form.descripcion}
+                onChange={(event) =>
+                  setField(
+                    'descripcion',
+                    event.target.value,
+                  )
+                }
+                placeholder="Breve descripción del rol"
+              />
+
+              {errors.descripcion && (
+                <p
+                  className="text-[10px] mt-1"
+                  style={{
+                    color: '#f87171',
+                  }}
+                >
+                  {errors.descripcion}
+                </p>
+              )}
+            </Field>
+
+            {editingId !== null && (
+              <Field label="Estado">
+                <select
+                  value={form.estado}
+                  onChange={(event) =>
+                    setField(
+                      'estado',
+                      event.target
+                        .value as EstadoRol,
+                    )
+                  }
+                  className="w-full rounded px-3 py-2.5 text-xs outline-none"
+                  style={{
+                    background:
+                      'var(--card)',
+                    border:
+                      '1px solid var(--border)',
+                    color:
+                      'var(--foreground)',
+                  }}
+                >
+                  <option value="ACTIVO">
+                    ACTIVO
+                  </option>
+                  <option value="INACTIVO">
+                    INACTIVO
+                  </option>
+                </select>
+              </Field>
+            )}
+          </div>
+
+          <div
+            className="mt-6 pt-5"
+            style={{
+              borderTop:
+                '1px solid var(--border)',
+            }}
+          >
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div>
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    color:
+                      'var(--foreground)',
+                  }}
+                >
+                  Matriz de Permisos
+                </h3>
+
+                <p
+                  className="text-[10px] mt-1"
+                  style={{
+                    color:
+                      'var(--muted-foreground)',
+                  }}
+                >
+                  {selectedPermissions} de{' '}
+                  {totalPermissions}{' '}
+                  permisos seleccionados
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    loadingPermissions ||
+                    !permissionMatrix
+                  }
+                  onClick={() =>
+                    setAllPermissions(true)
+                  }
+                  className="px-3 py-1.5 rounded text-[10px] font-medium"
+                  style={{
+                    background:
+                      'rgba(200,168,75,0.1)',
+                    color:
+                      'var(--gold)',
+                    border:
+                      '1px solid var(--gold-dim)',
+                  }}
+                >
+                  Marcar todos
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    loadingPermissions ||
+                    !permissionMatrix
+                  }
+                  onClick={() =>
+                    setAllPermissions(false)
+                  }
+                  className="px-3 py-1.5 rounded text-[10px] font-medium"
+                  style={{
+                    background:
+                      'var(--muted)',
+                    color:
+                      'var(--muted-foreground)',
+                    border:
+                      '1px solid var(--border)',
+                  }}
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+
+            {loadingPermissions ? (
+              <div
+                className="flex items-center justify-center gap-2 py-16 rounded-lg"
                 style={{
-                  background: 'var(--card)',
+                  background:
+                    'var(--card)',
                   border:
                     '1px solid var(--border)',
-                  color: 'var(--foreground)',
                 }}
               >
-                <option value="ACTIVO">
-                  ACTIVO
-                </option>
-                <option value="INACTIVO">
-                  INACTIVO
-                </option>
-              </select>
-            </Field>
-          )}
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                  style={{
+                    color: 'var(--gold)',
+                  }}
+                />
+
+                <span
+                  className="text-xs"
+                  style={{
+                    color:
+                      'var(--muted-foreground)',
+                  }}
+                >
+                  Cargando permisos...
+                </span>
+              </div>
+            ) : permissionsError ? (
+              <div
+                className="rounded-lg p-4 text-xs"
+                style={{
+                  background:
+                    'rgba(248,113,113,0.08)',
+                  border:
+                    '1px solid rgba(248,113,113,0.25)',
+                  color: '#f87171',
+                }}
+              >
+                {permissionsError}
+              </div>
+            ) : permissionMatrix ? (
+              <div
+                className="rounded-lg overflow-hidden"
+                style={{
+                  background:
+                    'var(--card)',
+                  border:
+                    '1px solid var(--border)',
+                }}
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[650px] text-xs">
+                    <thead>
+                      <tr
+                        style={{
+                          background:
+                            'var(--secondary)',
+                          borderBottom:
+                            '1px solid var(--border)',
+                        }}
+                      >
+                        <th
+                          className="text-left px-5 py-3 font-medium tracking-widest uppercase min-w-[230px]"
+                          style={{
+                            color:
+                              'var(--muted-foreground)',
+                            fontSize:
+                              '9px',
+                          }}
+                        >
+                          Módulo
+                        </th>
+
+                        {permissionMatrix.acciones.map(
+                          (action) => (
+                            <th
+                              key={
+                                action.idAccion
+                              }
+                              className="px-4 py-3 text-center font-medium tracking-widest uppercase min-w-[88px]"
+                              style={{
+                                color:
+                                  'var(--muted-foreground)',
+                                fontSize:
+                                  '9px',
+                              }}
+                            >
+                              <label className="flex flex-col items-center gap-1.5 cursor-pointer">
+                                <span>
+                                  {
+                                    action.codigo
+                                  }
+                                </span>
+
+                                <input
+                                  type="checkbox"
+                                  checked={isActionFullySelected(
+                                    action.idAccion,
+                                  )}
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    setActionPermissions(
+                                      action.idAccion,
+                                      event
+                                        .target
+                                        .checked,
+                                    )
+                                  }
+                                  aria-label={`Seleccionar toda la columna ${action.nombre}`}
+                                  className="w-3.5 h-3.5 cursor-pointer"
+                                  style={{
+                                    accentColor:
+                                      'var(--gold)',
+                                  }}
+                                />
+                              </label>
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {permissionMatrix.modulos.map(
+                        (module) => (
+                          <tr
+                            key={
+                              module.idModulo
+                            }
+                            style={{
+                              borderBottom:
+                                '1px solid rgba(255,255,255,0.04)',
+                            }}
+                            onMouseEnter={(
+                              event,
+                            ) => {
+                              event.currentTarget.style.background =
+                                'rgba(255,255,255,0.02)'
+                            }}
+                            onMouseLeave={(
+                              event,
+                            ) => {
+                              event.currentTarget.style.background =
+                                'transparent'
+                            }}
+                          >
+                            <td className="px-5 py-4">
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isModuleFullySelected(
+                                    module.idModulo,
+                                  )}
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    setModulePermissions(
+                                      module.idModulo,
+                                      event
+                                        .target
+                                        .checked,
+                                    )
+                                  }
+                                  aria-label={`Seleccionar todos los permisos de ${module.nombre}`}
+                                  className="w-3.5 h-3.5 cursor-pointer mt-0.5"
+                                  style={{
+                                    accentColor:
+                                      'var(--gold)',
+                                  }}
+                                />
+
+                                <div>
+                                  <p
+                                    className="font-medium"
+                                    style={{
+                                      color:
+                                        'var(--foreground)',
+                                    }}
+                                  >
+                                    {
+                                      module.nombre
+                                    }
+                                  </p>
+
+                                  <p
+                                    className="text-[10px] mt-1"
+                                    style={{
+                                      color:
+                                        'var(--muted-foreground)',
+                                    }}
+                                  >
+                                    {module.descripcion ||
+                                      module.codigo}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {permissionMatrix.acciones.map(
+                              (
+                                action,
+                              ) => {
+                                const permission =
+                                  module.permisos.find(
+                                    (
+                                      item,
+                                    ) =>
+                                      item.idAccion ===
+                                      action.idAccion,
+                                  )
+
+                                return (
+                                  <td
+                                    key={`${module.idModulo}-${action.idAccion}`}
+                                    className="px-4 py-4 text-center"
+                                  >
+                                    {permission ? (
+                                      <input
+                                        type="checkbox"
+                                        checked={
+                                          permission.permitido
+                                        }
+                                        onChange={() =>
+                                          togglePermission(
+                                            permission.idPermiso,
+                                          )
+                                        }
+                                        aria-label={`${action.nombre} en ${module.nombre}`}
+                                        className="w-4 h-4 cursor-pointer"
+                                        style={{
+                                          accentColor:
+                                            'var(--gold)',
+                                        }}
+                                      />
+                                    ) : (
+                                      <span
+                                        style={{
+                                          color:
+                                            'var(--muted-foreground)',
+                                          opacity:
+                                            0.35,
+                                        }}
+                                      >
+                                        —
+                                      </span>
+                                    )}
+                                  </td>
+                                )
+                              },
+                            )}
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {errors.permisos && (
+              <p
+                className="text-[10px] mt-2"
+                style={{
+                  color: '#f87171',
+                }}
+              >
+                {errors.permisos}
+              </p>
+            )}
+          </div>
         </div>
 
         <div
           className="flex justify-end gap-3 mt-6 pt-4"
           style={{
-            borderTop: '1px solid var(--border)',
+            borderTop:
+              '1px solid var(--border)',
           }}
         >
           <button
@@ -926,7 +1688,8 @@ export default function RolesPage() {
               background: 'var(--muted)',
               color:
                 'var(--muted-foreground)',
-              border: '1px solid var(--border)',
+              border:
+                '1px solid var(--border)',
               opacity: saving ? 0.6 : 1,
             }}
           >
@@ -938,13 +1701,24 @@ export default function RolesPage() {
             onClick={() =>
               void handleSubmit()
             }
-            disabled={saving}
+            disabled={
+              saving ||
+              loadingPermissions ||
+              Boolean(permissionsError) ||
+              !permissionMatrix
+            }
             className="px-5 py-2.5 rounded text-xs font-semibold flex items-center gap-2"
             style={{
               background: 'var(--gold)',
               color:
                 'var(--primary-foreground)',
-              opacity: saving ? 0.7 : 1,
+              opacity:
+                saving ||
+                  loadingPermissions ||
+                  permissionsError ||
+                  !permissionMatrix
+                  ? 0.6
+                  : 1,
             }}
           >
             {saving && (
@@ -965,7 +1739,9 @@ export default function RolesPage() {
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={() =>
+            setToast(null)
+          }
         />
       )}
     </div>
