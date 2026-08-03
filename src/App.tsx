@@ -45,6 +45,12 @@ import CasinosPage from './features/config/CasinosPage';
 
 import PortalDIANPage from './features/reception/PortalDIANPage';
 import ReglasPUCPage from './features/reception/ReglasPUCPage';
+import CargarXmlPage from './features/reception/CargarXmlPage';
+import PanelControlPage from './features/reception/PanelControlPage';
+
+import ResumenDianPage from './features/dian/ResumenDianPage';
+import NuevaFacturaPage from './features/dian/NuevaFacturaPage';
+import ResolucionesDianPage from './features/dian/ResolucionesDianPage';
 
 import {
   AppProvider,
@@ -176,20 +182,8 @@ const STUBS: Partial<
     title: 'Monitor Operativo',
   },
 
-  resumen_dian: {
-    title: 'Resumen DIAN',
-  },
-
-  nueva_factura: {
-    title: 'Nueva Factura',
-  },
-
   nuevo_doc_soporte: {
     title: 'Nuevo Doc. Soporte',
-  },
-
-  resoluciones_dian: {
-    title: 'Resoluciones DIAN',
   },
 
   gestion_pagos: {
@@ -202,14 +196,6 @@ const STUBS: Partial<
 
   recepcion: {
     title: 'Recepción',
-  },
-
-  panel_control: {
-    title: 'Panel Control',
-  },
-
-  cargar_xml: {
-    title: 'Cargar XML',
   },
 
   buzon_email: {
@@ -344,6 +330,21 @@ function AdminApp({
 
       case 'reglas_puc':
         return <ReglasPUCPage />;
+
+      case 'cargar_xml':
+        return <CargarXmlPage />;
+
+      case 'panel_control':
+        return <PanelControlPage />;
+
+      case 'resumen_dian':
+        return <ResumenDianPage />;
+
+      case 'nueva_factura':
+        return <NuevaFacturaPage />;
+
+      case 'resoluciones_dian':
+        return <ResolucionesDianPage />;
 
       default: {
         const stub =
